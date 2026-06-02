@@ -1,0 +1,10 @@
+﻿*.bat
+*.log
+__pycache__/
+playwright_browsers/
+releases/
+packer_config.json
+*.spec
+build/
+dist/
+plugins/copy_manga/

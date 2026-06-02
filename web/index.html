@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScrollPack</title>
+<style>
+:root {
+  --bg: #0e0e10;
+  --panel: #161618;
+  --panel2: #1c1c1f;
+  --hover: #222228;
+  --border: #2a2a30;
+  --text: #e4e4e7;
+  --text2: #a1a1aa;
+  --text3: #6b6b75;
+  --accent: #6c5ce7;
+  --accent2: #8b7cf0;
+  --green: #22c55e;
+  --red: #ef4444;
+  --amber: #f59e0b;
+  --radius: 10px;
+  --font: -apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif;
+  --mono: "SF Mono","Fira Code","Cascadia Code","Consolas",monospace;
+}
+[data-theme="light"] {
+  --bg: #f5f5f7;
+  --panel: #ffffff;
+  --panel2: #f0f0f3;
+  --hover: #e8e8ed;
+  --border: #dcdce0;
+  --text: #1d1d20;
+  --text2: #585862;
+  --text3: #8e8e98;
+  --accent: #6c5ce7;
+  --accent2: #5a4bd1;
+  --green: #16a34a;
+  --red: #dc2626;
+  --amber: #d97706;
+}
+[data-theme="light"] .modal-overlay { background:rgba(255,255,255,0.5) }
+[data-theme="light"] .toast { box-shadow:0 8px 24px rgba(0,0,0,0.12) }
+[data-theme="light"] .field input:focus { box-shadow:0 0 0 3px rgba(108,92,231,0.15) }
+* { margin:0; padding:0; box-sizing:border-box }
+.hidden { display:none }
+html,body { height:100%; overflow:hidden }
+body { font-family:var(--font); background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased; display:flex; flex-direction:column }
+
+/* ====== Title Bar ====== */
+.titlebar { display:flex; align-items:center; gap:12px; padding:0 20px; height:44px; background:var(--bg); border-bottom:1px solid var(--border); -webkit-app-region:drag; user-select:none; flex-shrink:0 }
+.titlebar .dot { width:10px; height:10px; border-radius:50%; flex-shrink:0 }
+.titlebar .dot.r { background:var(--red) }
+.titlebar .dot.y { background:var(--amber) }
+.titlebar .dot.g { background:var(--green) }
+.titlebar .t { flex:1; font-size:12px; font-weight:600; color:var(--text2); text-align:center; letter-spacing:0.3px }
+.titlebar .t span { background:linear-gradient(135deg,var(--accent2),var(--accent)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text }
+
+/* ====== Main Layout ====== */
+.main { display:flex; flex:1; overflow:hidden }
+.sidebar { width:340px; min-width:340px; background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden }
+.sidebar-scroll { flex:1; overflow-y:auto; overflow-x:hidden; min-height:0; border-bottom:1px solid var(--border) }
+.sidebar-scroll::-webkit-scrollbar { width:5px }
+.sidebar-scroll::-webkit-scrollbar-track { background:transparent }
+.sidebar-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:10px }
+.sidebar-scroll::-webkit-scrollbar-thumb:hover { background:var(--text3) }
+.sidebar-foot { flex-shrink:0; border-top:1px solid var(--border); margin-top:auto; padding:10px 20px !important }
+
+.content::-webkit-scrollbar { width:5px }
+.content::-webkit-scrollbar-track { background:transparent }
+.content::-webkit-scrollbar-thumb { background:var(--border); border-radius:10px }
+.content::-webkit-scrollbar-thumb:hover { background:var(--text3) }
+.log::-webkit-scrollbar { width:5px }
+.log::-webkit-scrollbar-track { background:transparent }
+.log::-webkit-scrollbar-thumb { background:var(--border); border-radius:10px }
+.content { flex:1; overflow-y:auto; overflow-x:hidden; padding:24px }
+
+/* ====== Sidebar ====== */
+.sidebar-section { padding:14px 20px; border-bottom:1px solid var(--border); flex-shrink:0 }
+.sidebar-label { font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px }
+
+.field { margin-bottom:12px }
+.field:last-child { margin-bottom:0 }
+.field label { display:block; font-size:11px; color:var(--text3); margin-bottom:4px }
+.field input,.field select { width:100%; padding:9px 12px; background:var(--panel2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:13px; font-family:var(--font); outline:none; transition:all 0.15s }
+.field input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(108,92,231,0.12) }
+.field input::placeholder { color:var(--text3) }
+.field-row { display:flex; gap:8px }
+.field-row .field { flex:1 }
+
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:5px; padding:7px 14px; border:none; border-radius:6px; font-size:12px; font-weight:600; font-family:var(--font); cursor:pointer; transition:all 0.15s; white-space:nowrap; letter-spacing:0.2px }
+.btn:disabled { opacity:0.35; cursor:not-allowed; pointer-events:none }
+.btn-primary { background:var(--accent); color:#fff; width:100% }
+.btn-primary:hover:not(:disabled) { background:var(--accent2) }
+.btn-ghost { background:transparent; color:var(--text2); border:1px solid var(--border) }
+.btn-ghost:hover { background:var(--panel2); color:var(--text) }
+.btn-sm { padding:4px 10px; font-size:11px }
+
+.btn-row { display:flex; gap:8px; margin-top:12px }
+.btn-row .btn { flex:1 }
+
+/* ====== Content Area ====== */
+.panel { background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:16px; overflow:hidden }
+.panel-header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:8px }
+.panel-header h3 { font-size:11px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:0.5px; flex:1 }
+.panel-body { padding:20px }
+
+.book { display:flex; gap:18px }
+.book-cover { width:110px; height:150px; border-radius:8px; object-fit:cover; background:var(--panel2); flex-shrink:0 }
+.book-info { flex:1; min-width:0 }
+.book-title { font-size:18px; font-weight:700; color:var(--text); letter-spacing:-0.3px }
+.book-alias { font-size:12px; color:var(--text3); margin:2px 0 10px }
+.book-meta { font-size:12px; color:var(--text2); line-height:1.8 }
+.book-meta b { color:var(--text3); font-weight:500; margin-right:4px }
+.book-desc { font-size:11px; color:var(--text3); margin-top:10px; line-height:1.7; max-height:60px; overflow-y:auto }
+.book-source { font-size:11px; color:var(--accent2); margin-top:8px }
+
+.vol-list { display:flex; flex-direction:column; gap:6px }
+.vol-group { background:var(--panel2); border:1px solid var(--border); border-radius:6px; overflow:hidden }
+.vol-head { display:flex; align-items:center; gap:10px; padding:10px 14px; cursor:pointer; user-select:none }
+.vol-head:hover { background:var(--hover) }
+.vol-head input { accent-color:var(--accent); width:14px; height:14px; flex-shrink:0 }
+.vol-head .vn { flex:1; font-size:13px; font-weight:500 }
+.vol-head .vc { font-size:11px; color:var(--text3) }
+.vol-head .va { font-size:11px; color:var(--text3); transition:transform 0.2s }
+.vol-group.open .va { transform:rotate(90deg) }
+.vol-body { display:none; border-top:1px solid var(--border); max-height:240px; overflow-y:auto }
+.vol-group.open .vol-body { display:block }
+.vol-body .ch-item { display:flex; align-items:center; gap:8px; padding:6px 14px 6px 38px; cursor:pointer; font-size:12px; color:var(--text2) }
+.vol-body .ch-item:hover { background:var(--hover) }
+.vol-body .ch-item input { accent-color:var(--accent); width:12px; height:12px; flex-shrink:0 }
+
+.opt-row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:6px }
+.opt-row label { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text3); cursor:pointer }
+.opt-row input[type="checkbox"] { accent-color:var(--accent); width:13px; height:13px }
+
+.toggle-item { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:var(--panel2); border-radius:6px; margin-bottom:10px }
+.toggle-item span { font-size:12px; color:var(--text2) }
+.toggle-item input { accent-color:var(--accent); width:14px; height:14px }
+
+/* ====== Log ====== */
+.log { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:14px; max-height:360px; overflow-y:auto; font-family:var(--mono); font-size:11px; line-height:1.8 }
+.log .l { display:flex; gap:10px }
+.log .t { color:var(--text3); flex-shrink:0 }
+.log .info { color:var(--text2) }
+.log .start { color:var(--accent2) }
+.log .done { color:var(--green) }
+.log .retry { color:var(--amber) }
+.log .fail { color:var(--red) }
+.log .vol { color:#a78bfa; font-weight:600 }
+.log .pack { color:var(--green); font-weight:700; font-size:12px }
+
+/* ====== Downloads ====== */
+.dl-list { display:flex; flex-direction:column; gap:6px }
+.dl-link { display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--panel2); border-radius:6px; color:var(--accent2); text-decoration:none; font-size:12px; font-weight:500; transition:background 0.12s }
+.dl-link:hover { background:var(--hover) }
+
+/* ====== Status Bar ====== */
+.statusbar { display:flex; align-items:center; gap:16px; padding:0 20px; height:28px; background:var(--panel); border-top:1px solid var(--border); flex-shrink:0; font-size:11px; color:var(--text3) }
+.statusbar .st-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0 }
+.statusbar .st-dot.idle { background:var(--text3) }
+.statusbar .st-dot.running { background:var(--amber); animation:pulse 1s infinite }
+.statusbar .st-dot.done { background:var(--green) }
+.statusbar .st-dot.error { background:var(--red) }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.statusbar .st-update { color:var(--green); cursor:pointer; text-decoration:none }
+.statusbar .st-update:hover { text-decoration:underline }
+
+.spin { display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,0.2); border-top-color:#fff; border-radius:50%; animation:spin 0.6s linear infinite }
+@keyframes spin { to { transform:rotate(360deg) } }
+
+.empty { text-align:center; padding:32px 20px; color:var(--text3); font-size:13px }
+.toast { position:fixed; bottom:48px; right:24px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:10px 18px; font-size:12px; z-index:99; animation:up 0.25s ease; box-shadow:0 8px 24px rgba(0,0,0,0.5) }
+@keyframes up { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+.toast.err { border-color:var(--red) }
+.toast.ok { border-color:var(--green) }
+
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center }
+.modal-overlay.open { display:flex }
+.modal-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; width:620px; max-height:80vh; display:flex; overflow:hidden; box-shadow:0 16px 48px rgba(0,0,0,0.6) }
+.modal-box h3 { font-size:14px; font-weight:600; margin-bottom:16px; display:flex; align-items:center; gap:8px }
+.modal-box .close-btn { margin-left:auto; background:none; border:none; color:var(--text3); font-size:18px; cursor:pointer; padding:0 4px }
+.modal-box .close-btn:hover { color:var(--text) }
+
+.modal-sidebar { width:140px; min-width:140px; background:var(--panel2); border-right:1px solid var(--border); padding:16px 0; display:flex; flex-direction:column; gap:2px }
+.modal-sidebar .tab { padding:10px 16px; font-size:12px; color:var(--text3); cursor:pointer; border-left:2px solid transparent; background:transparent; border-top:none; border-right:none; border-bottom:none; width:100%; text-align:left; font-family:var(--font); transition:all 0.12s }
+.modal-sidebar .tab:hover { color:var(--text); background:var(--hover) }
+.modal-sidebar .tab.active { color:var(--accent2); border-left-color:var(--accent); background:rgba(108,92,231,0.08) }
+.modal-content { flex:1; overflow-y:auto; padding:24px; min-width:0 }
+.modal-content .tab-panel { display:none }
+.modal-content .tab-panel.active { display:block }
+
+@media (max-width:720px) {
+  .main { flex-direction:column }
+  .sidebar { width:100%; min-width:100%; max-height:50vh; overflow-y:auto }
+  .content { padding:16px }
+  .book { flex-direction:column; align-items:center; text-align:center }
+}
+</style>
+</head>
+<body>
+
+<!-- Main -->
+<div class="main">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div style="padding:16px 20px 10px;display:flex;align-items:center;justify-content:space-between">
+      <div style="flex:1"></div>
+      <span style="font-size:15px;font-weight:700;letter-spacing:0.5px;background:linear-gradient(135deg,var(--accent2),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">ScrollPack</span>
+      <div style="flex:1;text-align:right">
+        <button class="btn btn-ghost btn-sm" onclick="toggleTheme()" id="themeBtn" title="切换日间/夜间模式" style="padding:2px 8px;font-size:13px;line-height:1">&#9788;</button>
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label" style="display:flex;align-items:center"><span>URL</span><button class="btn btn-ghost btn-sm" onclick="$('settingsModal').classList.add('open');loadPlugins()" style="margin-left:auto;font-size:14px">&#9881;</button></div>
+      <div class="field">
+        <input type="text" id="urlInput" placeholder="粘贴小说/漫画链接..." onkeydown="if(event.key==='Enter')loadNovel()">
+      </div>
+      <button class="btn btn-primary" id="loadBtn" onclick="loadNovel()" style="margin-top:10px">加载小说/漫画</button>
+      <div style="font-size:10px;color:var(--text3);margin-top:8px;line-height:1.5" id="sourceHint"></div>
+    </div>
+
+    <div class="sidebar-section sidebar-scroll" id="volSidebar" style="display:none">
+      <div class="sidebar-label">分卷选择</div>
+      <div class="vol-actions">
+        <button class="btn btn-ghost btn-sm" onclick="selAll()">全选</button>
+        <button class="btn btn-ghost btn-sm" onclick="selNone()">取消</button>
+      </div>
+      <div class="vol-list" id="volumeList"></div>
+    </div>
+
+    <div class="sidebar-section sidebar-foot" id="packSection" style="display:none">
+      <div class="sidebar-label">分卷设置</div>
+      <div class="toggle-item" style="padding:4px 0"><span>合并所有卷为一个文件</span><input type="checkbox" id="combineVolume" onchange="saveSettings()"></div>
+      <div class="toggle-item" style="padding:4px 0"><span>添加章节标题</span><input type="checkbox" id="addChapterTitle" checked onchange="saveSettings()"></div>
+      <div class="opt-row">
+        <label><input type="radio" name="fmt" value="epub" checked onchange="saveSettings()"> EPUB</label>
+        <label><input type="radio" name="fmt" value="cbz" onchange="saveSettings()"> CBZ</label>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" id="packBtn" onclick="startPack()" style="flex:1">开始打包</button>
+        <button class="btn btn-danger" id="stopBtn" onclick="stopPack()" style="display:none">停止</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-ghost btn-sm" onclick="browseFiles()" style="flex:1">浏览已生成文件</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="content" id="contentArea">
+    <div class="empty" id="placeholder">在左侧输入小说/漫画链接开始</div>
+
+    <div class="panel hidden" id="novelPanel">
+      <div class="panel-header"><h3>作品信息</h3></div>
+      <div class="panel-body" id="novelContent"></div>
+      <div id="novelError" style="color:var(--red);font-size:12px;padding:0 20px 16px;display:none"></div>
+    </div>
+
+    <div class="panel hidden" id="progressPanel">
+      <div class="panel-header"><h3>打包进度</h3></div>
+      <div class="panel-body" style="padding:12px 20px">
+        <div style="margin-bottom:10px">
+          <div id="progressBarWrap" style="background:var(--panel2);border-radius:6px;height:8px;overflow:hidden">
+            <div id="progressBar" style="background:linear-gradient(90deg,var(--accent),var(--accent2));height:100%;width:0%;transition:width 0.3s;border-radius:6px"></div>
+          </div>
+          <div id="progressText" style="font-size:10px;color:var(--text3);margin-top:4px;text-align:center">0%</div>
+        </div>
+        <div class="log" id="progressLog"></div>
+      </div>
+    </div>
+
+    <div class="panel hidden" id="downloadPanel">
+      <div class="panel-header"><h3>下载</h3></div>
+      <div class="panel-body">
+        <div class="dl-list" id="downloadLinks"></div>
+      </div>
+    </div>
+
+    <div class="panel hidden" id="browsePanel">
+      <div class="panel-header"><h3>已生成的文件</h3></div>
+      <div class="panel-body">
+        <div id="browseLoading" style="text-align:center;padding:20px;color:var(--text3)">加载中...</div>
+        <div class="dl-list hidden" id="browseList"></div>
+        <div id="browseEmpty" style="text-align:center;padding:20px;color:var(--text3);display:none">暂无文件</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal-box">
+    <div class="modal-sidebar">
+      <button class="tab active" onclick="switchTab('tab-general',this)">通用设置</button>
+      <button class="tab" onclick="switchTab('tab-plugins',this)">插件管理</button>
+      <button class="tab" onclick="switchTab('tab-about',this)">关于</button>
+    </div>
+    <div class="modal-content">
+      <!-- Tab: General -->
+      <div class="tab-panel active" id="tab-general">
+        <h3>通用设置</h3>
+        <div class="toggle-item"><span>无头模式 (后台运行)</span><input type="checkbox" id="headless" checked onchange="saveSettings()"></div>
+        <div class="toggle-item"><span>代理</span><input type="checkbox" id="enableProxy" onchange="saveSettings()"></div>
+        <div class="field-row"><div class="field"><label>代理地址</label><input type="text" id="proxyHost" placeholder="127.0.0.1" onchange="saveSettings()"></div><div class="field"><label>端口</label><input type="number" id="proxyPort" placeholder="7890" onchange="saveSettings()"></div></div>
+        <div class="field-row"><div class="field"><label>用户名</label><input type="text" id="proxyUsername" placeholder="可选" onchange="saveSettings()"></div><div class="field"><label>密码</label><input type="password" id="proxyPassword" placeholder="可选" onchange="saveSettings()"></div></div>
+        <div class="field-row"><div class="field"><label>最大重试</label><input type="number" id="maxRetries" value="5" min="1" max="50" onchange="saveSettings()"></div><div class="field"><label>间隔 (秒)</label><input type="number" id="retryDelaySeconds" value="3" min="1" max="60" onchange="saveSettings()"></div></div>
+        <div class="field"><label>保存目录</label><div style="display:flex;gap:6px"><input type="text" id="outputDir" placeholder="留空=当前目录" onchange="saveSettings()" style="flex:1"><button class="btn btn-ghost btn-sm" id="pickDirBtn" onclick="pickDir()" style="flex-shrink:0">&hellip;</button></div></div>
+        <button class="btn btn-ghost btn-sm" onclick="testConnection()" style="margin-top:10px;width:100%">测试连接</button>
+        <div id="testResult" style="font-size:10px;margin-top:6px;max-height:120px;overflow-y:auto"></div>
+      </div>
+      <!-- Tab: Plugins -->
+      <div class="tab-panel" id="tab-plugins">
+        <h3>插件管理</h3>
+        <div class="field"><label>插件仓库地址</label><input type="text" id="repoUrl" placeholder="https://raw.githubusercontent.com/用户/仓库/main" onchange="saveSettings()"></div>
+        <div style="margin-bottom:14px">
+          <div class="sidebar-label" style="display:flex;align-items:center;gap:8px"><span>在线插件</span><button class="btn btn-ghost btn-sm" onclick="fetchOnlinePlugins()" style="padding:2px 8px;font-size:11px">拉取插件</button></div>
+          <div id="repoStatus" style="font-size:10px;color:var(--text3);margin-bottom:6px"></div>
+          <div id="repoPluginList" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;margin-bottom:8px"></div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:12px">
+          <div class="sidebar-label">本地插件</div>
+          <div style="display:flex;gap:6px;margin-bottom:8px">
+            <input type="file" id="importPluginFile" accept=".zip" style="display:none" onchange="importPlugin()">
+            <button class="btn btn-ghost btn-sm" onclick="$('importPluginFile').click()" style="flex:1">导入 .zip</button>
+          </div>
+          <div id="pluginList" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+      </div>
+      <!-- Tab: About -->
+      <div class="tab-panel" id="tab-about">
+        <h3>关于</h3>
+        <div style="font-size:12px;color:var(--text2);line-height:2">
+          <div><b style="color:var(--accent2)">ScrollPack</b> <span id="aboutVersion" style="color:var(--text3)"></span></div>
+          <div style="font-size:11px;color:var(--text3)">轻小说/漫画多源打包下载工具</div>
+          <div id="aboutUpdate" style="font-size:11px;margin-top:4px"></div>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <a href="https://github.com/Montaro2017/ScrollPack" target="_blank" style="color:var(--accent2);text-decoration:none">GitHub &rarr;</a>
+            <button class="btn btn-ghost btn-sm" onclick="checkAppUpdate()" style="margin-left:auto;font-size:11px">检查更新</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Status Bar -->
+<div class="statusbar">
+  <span class="st-dot idle" id="stDot"></span>
+  <span id="stText" style="font-size:11px;color:var(--text3)">就绪</span>
+  <a class="st-update hidden" id="stUpdate" target="_blank" style="margin-left:auto"></a>
+</div>
+
+<script>
+const $ = id => document.getElementById(id)
+const $$ = s => Array.from(document.querySelectorAll(s))
+
+async function checkAppUpdate(){
+  try {
+    const r = await fetch("/api/version")
+    const d = await r.json()
+    const el = $("aboutUpdate")
+    if(d.update){
+      el.innerHTML = `<span style="color:var(--amber)">新版本可用: v${d.latest}</span> <a href="${d.url}" target="_blank" style="color:var(--accent2);text-decoration:underline">下载 &rarr;</a>`
+    } else {
+      el.innerHTML = `<span style="color:var(--green)">已是最新版本</span>`
+    }
+  } catch(e){
+    $("aboutUpdate").innerHTML = `<span style="color:var(--red)">检查失败</span>`
+  }
+}
+
+async function checkVersion(){
+  try {
+    const r = await fetch("/api/version")
+    const d = await r.json()
+    $("stText").textContent = "v" + d.current
+    if(d.update){
+      $("stUpdate").textContent = "新版 v" + d.latest + " 可用 →"
+      $("stUpdate").href = d.url
+      $("stUpdate").classList.remove("hidden")
+    }
+  } catch(e){}
+}
+
+async function loadPlugins(){
+  try{
+    const r = await fetch("/api/plugins")
+    const d = await r.json()
+    $("pluginList").innerHTML = d.plugins.map(p=>`
+      <div class="toggle-item" style="margin-bottom:4px">
+        <span>${esc(p.name)} <span style="font-size:10px;color:var(--text3)">${p.type} v${p.version}</span>${p.encrypted?` <span style="font-size:9px;color:var(--amber)" title="已加密">&#128274;</span>`:""}</span>
+        <span style="display:flex;gap:4px">
+          <input type="checkbox" ${p.enabled?"checked":""} onchange="togglePlugin('${p.id}',this.checked)" style="width:14px;height:14px;accent-color:var(--accent)">
+          <a href="/api/plugins/export?plugin=${p.id}" class="btn btn-ghost btn-sm" style="padding:2px 6px;font-size:10px" title="导出">&#11015;</a>
+          <button class="btn btn-ghost btn-sm" onclick="deletePlugin('${p.id}')" style="padding:2px 6px;font-size:10px;color:var(--red)" title="卸载">&#10005;</button>
+        </span>
+      </div>`).join("")
+    const active = d.plugins.filter(p=>p.enabled).map(p=>p.name).join(" · ")
+    $("sourceHint").textContent = "支持：" + (active || "无可用源")
+  }catch(e){}
+}
+
+async function togglePlugin(id, enabled){
+  try{
+    await fetch("/api/plugins/toggle",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({id,enabled})
+    })
+    toast(enabled?"插件已启用":"插件已禁用，重启生效","ok")
+  }catch(e){toast("操作失败","err")}
+}
+
+async function deletePlugin(id){
+  if(!confirm(`确定卸载 "${id}"？重启后生效。`)) return
+  try{
+    const r = await fetch("/api/plugins/delete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})})
+    const d = await r.json()
+    if(d.error) throw new Error(d.error)
+    toast("已卸载: "+id+" — 重启生效","ok")
+    loadPlugins()
+  }catch(e){toast("卸载失败: "+e.message,"err")}
+}
+
+function toggleTheme(){
+  const html = document.documentElement
+  const isLight = html.getAttribute("data-theme") === "light"
+  html.setAttribute("data-theme", isLight ? "" : "light")
+  $("themeBtn").innerHTML = isLight ? "&#9788;" : "&#9790;"
+  localStorage.setItem("scrollpack_theme", isLight ? "dark" : "light")
+}
+
+(function initTheme(){
+  const saved = localStorage.getItem("scrollpack_theme") || "dark"
+  document.documentElement.setAttribute("data-theme", saved === "light" ? "light" : "")
+  $("themeBtn").innerHTML = saved === "light" ? "&#9790;" : "&#9788;"
+})()
+
+async function importPlugin(){
+  const file = $("importPluginFile").files[0]
+  if(!file) return
+  const fd = new FormData()
+  fd.append("file", file)
+  try{
+    const r = await fetch("/api/plugins/import", {method:"POST", body:fd})
+    const d = await r.json()
+    if(d.error) throw new Error(d.error)
+    toast("导入成功: " + d.name, "ok")
+    loadPlugins()
+  }catch(e){toast("导入失败: "+e.message,"err")}
+  $("importPluginFile").value = ""
+}
+
+async function fetchOnlinePlugins(){
+  const status = $("repoStatus")
+  const list = $("repoPluginList")
+  status.innerHTML = '<span class="spin"></span> 拉取中...'
+  list.innerHTML = ""
+  try{
+    const r = await fetch("/api/plugins/check-updates")
+    const d = await r.json()
+    if(d.error) throw new Error(d.error)
+    const all = d.all||[]
+    if(!all.length){
+      status.textContent = "仓库无插件"
+      return
+    }
+    const updates = d.updates?.length||0
+    const news = d.new?.length||0
+    status.textContent = `共 ${all.length} 个` + (updates?` · ${updates} 可更新`:"") + (news?` · ${news} 可安装`:"")
+    list.innerHTML = all.map(p=>{
+      let badge = ""
+      if(p.installed && p.local_version !== p.version) badge = `<span style="font-size:9px;color:var(--amber);white-space:nowrap">更新</span>`
+      else if(!p.installed) badge = `<span style="font-size:9px;color:var(--green);white-space:nowrap">新</span>`
+      else badge = `<span style="font-size:9px;color:var(--text3);white-space:nowrap">已安装</span>`
+      return `<div class="toggle-item" style="padding:4px 0;align-items:flex-start">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px">${esc(p.name)} <span style="color:var(--text3)">v${esc(p.version)}</span></div>
+          <div style="font-size:9px;color:var(--text3)">${esc(p.id)} · ${esc(p.type)}${p.description?` · ${esc(p.description)}`:""}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          ${badge}
+          ${p.installed&&p.local_version===p.version?"":`<button class="btn btn-ghost btn-sm" data-dl="${esc(p.download)}" onclick="installPluginFromRepo(this.dataset.dl,this)" style="padding:2px 8px;font-size:10px">${p.installed?"更新":"安装"}</button>`}
+        </div>
+      </div>`
+    }).join("")
+  }catch(e){
+    status.textContent = "拉取失败: "+e.message
+    status.style.color = "var(--red)"
+  }
+}
+
+async function installPluginFromRepo(downloadUrl, btn){
+  if(btn){ btn.disabled = true; btn.textContent = "..." }
+  try{
+    const r = await fetch("/api/plugins/repo-install",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({download:downloadUrl})})
+    const d = await r.json()
+    if(d.error) throw new Error(d.error)
+    toast("安装成功: "+d.name, "ok")
+    loadPlugins()
+    fetchOnlinePlugins()
+  }catch(e){
+    const msg = e.message.includes("timeout")||e.message.includes("connect") ? "下载失败，检查网络后重试" : e.message
+    toast("安装失败: "+msg,"err")
+    if(btn){ btn.disabled = false; btn.textContent = "重试" }
+  }
+}
+
+let taskId = null, pollTimer = null, lastCb = null, _totalCh = 0, _doneCh = 0
+
+function switchTab(panelId, btn) {
+  $$(".modal-sidebar .tab").forEach(t => t.classList.remove("active"))
+  $$(".modal-content .tab-panel").forEach(p => p.classList.remove("active"))
+  btn.classList.add("active")
+  $(panelId).classList.add("active")
+  if (panelId === "tab-about") {
+    $("aboutVersion").textContent = $("stText").textContent || ""
+    checkAppUpdate()
+  }
+  if (panelId === "tab-plugins") {
+    loadPlugins()
+    fetchOnlinePlugins()
+  }
+}
+
+// 刷新后恢复任务轮询
+document.addEventListener("DOMContentLoaded", ()=>{
+  loadSettings()
+  loadPlugins()
+  checkVersion()
+  const saved = sessionStorage.getItem("taskId")
+  if(saved){
+    taskId = saved
+    $("progressPanel").classList.remove("hidden")
+    const btn = $("packBtn"); if(btn){ btn.disabled = true; btn.textContent = "...打包中" }
+    $("stopBtn").style.display = "inline-flex"
+    // quick status check to restore state
+    fetch("/api/status?task="+taskId).then(r=>r.json()).then(d=>{
+      if(d.logs){
+        $("progressLog").innerHTML = ""
+        d.logs.forEach(l => logStatic(l.type, l.message))
+      }
+      if(d.outputFiles?.length) showDL(d.outputFiles)
+      if(d.status === "running") {
+        $("progressPanel").classList.remove("hidden")
+        $("stopBtn").style.display = "inline-flex"
+      }
+      if(d.status === "done") { done("done"); showDL(d.outputFiles||[]) }
+      if(d.status === "error") { done("error") }
+    }).catch(()=>{})
+    if(saved) startPoll()
+  }
+})
+
+// Shift-click multi-select
+document.addEventListener("click", function(e){
+  const label = e.target.closest("label.ch-item")
+  if(!label) return
+  const cb = label.querySelector("input[type=checkbox]")
+  if(e.shiftKey && lastCb){
+    const all = $$(".ch-item input[type=checkbox]")
+    const a = all.indexOf(lastCb), b = all.indexOf(cb)
+    if(a>=0 && b>=0){
+      const lo = Math.min(a,b), hi = Math.max(a,b)
+      const v = cb.checked
+      for(let i=lo; i<=hi; i++) all[i].checked = v
+    }
+  }
+  lastCb = cb
+})
+
+async function loadSettings(){
+  try{
+    const r = await fetch("/api/settings")
+    const d = await r.json()
+    if(d.headless!==undefined) $("headless").checked = d.headless
+    if(d.outputDir) $("outputDir").value = d.outputDir
+    if(d.maxRetries) $("maxRetries").value = d.maxRetries
+    if(d.retryDelaySeconds) $("retryDelaySeconds").value = d.retryDelaySeconds
+    if(d.proxyHost) $("proxyHost").value = d.proxyHost
+    if(d.proxyPort) $("proxyPort").value = d.proxyPort
+    if(d.proxyUsername) $("proxyUsername").value = d.proxyUsername
+    if(d.proxyPassword) $("proxyPassword").value = d.proxyPassword
+    $("enableProxy").checked = d.enableProxy===true
+    if(d.combineVolume!==undefined) $("combineVolume").checked = d.combineVolume
+    if(d.addChapterTitle!==undefined) $("addChapterTitle").checked = d.addChapterTitle
+    if(d.repoUrl!==undefined) $("repoUrl").value = d.repoUrl||""
+  }catch(e){}
+}
+
+async function saveSettings(){
+  try{
+    await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+      headless:$("headless").checked,
+      outputDir:$("outputDir").value||null,
+      maxRetries:parseInt($("maxRetries").value)||5,
+      retryDelaySeconds:parseInt($("retryDelaySeconds").value)||3,
+      proxyHost:$("proxyHost").value||null,
+      proxyPort:$("proxyPort").value||null,
+      proxyUsername:$("proxyUsername").value||null,
+      proxyPassword:$("proxyPassword").value||null,
+      enableProxy:$("enableProxy").checked||false,
+      combineVolume:$("combineVolume").checked||false,
+      addChapterTitle:$("addChapterTitle").checked,
+      repoUrl:$("repoUrl").value||null,
+    })})
+  }catch(e){}
+}
+
+async function testConnection(){
+  const div=$("testResult")
+  div.innerHTML='<span class="spin"></span> 检测中...'
+  try{
+    const r=await fetch("/api/test-connection")
+    const d=await r.json()
+    div.innerHTML=d.results.map(r=>`<div style="margin:2px 0"><span style="color:${r.ok?'var(--green)':'var(--red)'}">[${r.ok?'OK':'FAIL'}]</span> ${esc(r.name)} — ${esc(r.detail)}</div>`).join("")
+  }catch(e){
+    div.innerHTML=`<span style="color:var(--red)">检测失败: ${esc(e.message)}</span>`
+  }
+}
+
+function getConfig() { return {
+  proxyHost: $("proxyHost").value||null, proxyPort: $("proxyPort").value||null,
+  proxyUsername: $("proxyUsername").value||null, proxyPassword: $("proxyPassword").value||null,
+  enableProxy: $("enableProxy").checked||false,
+  maxRetries: parseInt($("maxRetries").value)||5, retryDelaySeconds: parseInt($("retryDelaySeconds").value)||3,
+  outputDir: $("outputDir").value||null, headless: $("headless").checked,
+  combineVolume: $("combineVolume").checked||false, addChapterTitle: $("addChapterTitle").checked,
+  repoUrl: $("repoUrl").value||null,
+}}
+
+function toast(msg,t){const e=document.createElement("div");e.className="toast "+(t||"");e.textContent=msg;document.body.appendChild(e);setTimeout(()=>e.remove(),3000)}
+
+function setStatus(dot,text,hint){ /* removed */ }
+
+async function loadNovel(){
+  const url=$("urlInput").value.trim()
+  if(!url){toast("请输入 URL","err");return}
+  const btn=$("loadBtn");btn.disabled=true;btn.innerHTML='<span class="spin"></span>加载中'
+  setStatus("running","加载中...")
+  $("novelError").style.display="none"
+  $("novelPanel").classList.add("hidden")
+  $("progressPanel").classList.add("hidden")
+  $("downloadPanel").classList.add("hidden")
+  $("volSidebar").style.display="none"
+  $("packSection").style.display="none"
+  $("placeholder").style.display="none"
+  try{
+    const r=await fetch("/api/init",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url,...getConfig()})})
+    const d=await r.json()
+    if(d.error)throw new Error(d.error)
+    if(!d.novel)throw new Error("服务器返回数据异常")
+    renderNovel(d.novel,d.sourceName)
+    renderVolumes(d.catalog.volumes)
+    $("novelPanel").classList.remove("hidden")
+    $("volSidebar").style.display="block"
+    $("packSection").style.display="block"
+    setStatus("idle","就绪",d.catalog.volumes.length+" 卷")
+  }catch(e){
+    $("novelPanel").classList.remove("hidden")
+    $("novelError").style.display="block"
+    $("novelError").textContent="加载失败: "+e.message
+    setStatus("error","加载失败")
+  }finally{btn.disabled=false;btn.textContent="加载小说/漫画";$("novelContent").scrollIntoView?.()}
+}
+
+function renderNovel(n,src){
+  $("novelContent").innerHTML=`
+    <div class="book">
+      ${n.coverUrl?`<img class="book-cover" src="${esc(n.coverUrl)}" onerror="this.style.display='none'" alt="">`:""}
+      <div class="book-info">
+        <div class="book-title">${esc(n.title)}</div>
+        ${n.alias?`<div class="book-alias">${esc(n.alias)}</div>`:""}
+        <div class="book-meta"><b>作者</b>${esc(n.author)} &nbsp;<b>状态</b>${esc(n.status)}</div>
+        ${n.publisher?`<div class="book-meta"><b>文库</b>${esc(n.publisher)}</div>`:""}
+        ${n.tags?.length?`<div class="book-meta"><b>标签</b>${n.tags.map(esc).join(" / ")}</div>`:""}
+        ${n.description?`<div class="book-desc">${esc(n.description)}</div>`:""}
+        <div class="book-source">${esc(src)}</div>
+      </div>
+    </div>`
+}
+
+function renderVolumes(vols){
+  $("volumeList").innerHTML=vols.map((v,i)=>`
+    <div class="vol-group" id="vg${i}">
+      <div class="vol-head" onclick="toggleVol(${i})">
+        <input type="checkbox" checked onchange="toggleVolChs(${i},this.checked)" onclick="event.stopPropagation()">
+        <span class="vn">${esc(v.volumeName||"(无卷名)")}</span>
+        <span class="vc">${v.chapterCount} 章</span>
+        <span class="va">&#9654;</span>
+      </div>
+      <div class="vol-body">
+        ${(v.chapters||[]).map((ch,j)=>`
+          <label class="ch-item">
+            <input type="checkbox" checked data-vol="${i}" value="${esc(ch.url)}">
+            ${esc(ch.name)}
+          </label>`).join("")}
+      </div>
+    </div>`).join("")
+}
+
+function toggleVol(i){
+  const g = document.getElementById("vg"+i); if(!g) return
+  g.classList.toggle("open")
+}
+function toggleVolChs(i, checked){
+  const g = document.getElementById("vg"+i); if(!g) return
+  const chs = g.querySelectorAll(".ch-item input")
+  chs.forEach(c=>c.checked=checked)
+}
+function selAll(){
+  $$(".ch-item input").forEach(c=>c.checked=true)
+  $$(".vol-head input").forEach(c=>c.checked=true)
+}
+function selNone(){
+  $$(".ch-item input").forEach(c=>c.checked=false)
+  $$(".vol-head input").forEach(c=>c.checked=false)
+}
+function getSel(){
+  return $$(".ch-item input:checked").map(c=>c.value)
+}
+
+async function startPack(){
+  const url=$("urlInput").value.trim()
+  if(!url){toast("请输入 URL","err");return}
+  const sel=getSel()
+  if(!sel.length){toast("请选择至少一章","err");return}
+  const btn=$("packBtn");btn.disabled=true;btn.innerHTML='<span class="spin"></span>打包中'
+  $("stopBtn").style.display="inline-flex"
+  setStatus("running","打包中...")
+  _totalCh = sel.length; _doneCh = 0
+  $("progressBar").style.width = "0%"
+  $("progressText").textContent = "0%"
+  $("progressPanel").classList.remove("hidden");$("downloadPanel").classList.add("hidden")
+  $("progressLog").innerHTML=""
+  try{
+    const r=await fetch("/api/pack",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+      url,selectedChapters:sel,outputFormat:$$("input[name=fmt]:checked")[0]?.value||"epub",
+      combineVolume:$("combineVolume").checked,addChapterTitle:$("addChapterTitle").checked,
+      ...getConfig()
+    })})
+    const d=await r.json()
+    if(d.error)throw new Error(d.error)
+    if(d.taskId){taskId=d.taskId;sessionStorage.setItem("taskId",taskId);startPoll()}
+  }catch(e){
+    log("fail","打包失败: "+e.message)
+    btn.disabled=false;btn.textContent="开始打包";setStatus("error","失败")
+    $("stopBtn").style.display="none"
+  }
+}
+
+function startPoll(){
+  if(pollTimer)clearInterval(pollTimer)
+  pollTimer=setInterval(async()=>{
+    try{
+      const r=await fetch("/api/status?task="+taskId)
+      const d=await r.json()
+      if(d.logs){const box=$("progressLog");for(let i=box.children.length;i<d.logs.length;i++)log(d.logs[i].type,d.logs[i].message)}
+      if(d.outputFiles?.length)showDL(d.outputFiles)
+      if(d.status==="done"){done("done")}
+      if(d.status==="error"){done("error")}
+    }catch(e){}
+  },800)
+}
+
+function done(s){
+  clearInterval(pollTimer);pollTimer=null
+  sessionStorage.removeItem("taskId")
+  $("packBtn").disabled=false;$("packBtn").textContent="开始打包"
+  $("stopBtn").style.display="none"
+  setStatus(s==="done"?"done":"error",s==="done"?"完成":"出错")
+}
+
+function log(type,msg){
+  const m={chapter_start:"start",chapter_done:"done",chapter_retry:"retry",chapter_fail:"fail",volume_start:"vol",volume_done:"vol",pack_done:"pack",error:"fail"}
+  const box=$("progressLog")
+  const e=document.createElement("div");e.className="l"
+  e.innerHTML=`<span class="t">${new Date().toLocaleTimeString()}</span><span class="${m[type]||"info"}">${esc(msg)}</span>`
+  box.appendChild(e);box.scrollTop=box.scrollHeight
+  if(type==="chapter_done"){
+    _doneCh++
+    updateProgress()
+  }
+}
+
+function logStatic(type,msg){
+  const m={chapter_start:"start",chapter_done:"done",chapter_retry:"retry",chapter_fail:"fail",volume_start:"vol",volume_done:"vol",pack_done:"pack",error:"fail"}
+  const box=$("progressLog")
+  const e=document.createElement("div");e.className="l"
+  e.innerHTML=`<span class="t">—</span><span class="${m[type]||"info"}">${esc(msg)}</span>`
+  box.appendChild(e)
+  if(type==="chapter_done"){ _doneCh++; updateProgress() }
+  if(type==="chapter_start"){ _totalCh++ }
+}
+
+function updateProgress(){
+  const pct = _totalCh>0?Math.round(_doneCh/_totalCh*100):0
+  $("progressBar").style.width = pct+"%"
+  $("progressText").textContent = pct+"% ("+_doneCh+"/"+_totalCh+")"
+}
+
+function showDL(files){
+  $("downloadPanel").classList.remove("hidden")
+  $("downloadLinks").innerHTML=files.map(f=>{
+    const n=f.split(/[/\\]/).pop()
+    return`<a class="dl-link" href="/api/download?file=${encodeURIComponent(f)}" download="${esc(n)}"><span>&darr;</span>${esc(f)}</a>`
+  }).join("")
+}
+
+async function browseFiles(){
+  $("placeholder").style.display="none"
+  $("novelPanel").classList.add("hidden")
+  $("progressPanel").classList.add("hidden")
+  $("downloadPanel").classList.add("hidden")
+  $("browsePanel").classList.remove("hidden")
+  $("browseLoading").classList.remove("hidden")
+  $("browseList").classList.add("hidden")
+  $("browseEmpty").style.display="none"
+  $("browseList").innerHTML=""
+  try{
+    const r=await fetch("/api/browse-files")
+    const d=await r.json()
+    if(d.error) throw new Error(d.error)
+    if(!d.files.length){ $("browseLoading").classList.add("hidden"); $("browseEmpty").style.display="block"; return }
+    $("browseLoading").classList.add("hidden")
+    $("browseList").classList.remove("hidden")
+    $("browseList").innerHTML=d.files.map(f=>{
+      const dname = f.dir || ""
+      const size = f.size<1024*1024? (f.size/1024).toFixed(1)+" KB" : (f.size/1024/1024).toFixed(1)+" MB"
+      const dt = new Date(f.mtime*1000).toLocaleString()
+      return `<div class="dl-link" style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.name)}</div>
+          <div style="font-size:10px;color:var(--text3)">${dname?esc(dname)+" · ":""}${size} · ${dt}</div>
+        </div>
+        <a class="btn btn-ghost btn-sm" href="/api/download?file=${encodeURIComponent(f.path)}" download="${esc(f.name)}" style="flex-shrink:0">下载</a>
+        <button class="btn btn-ghost btn-sm" data-path="${esc(f.path)}" onclick="openFileDirect(this.dataset.path)" style="flex-shrink:0">查看</button>
+        <button class="btn btn-ghost btn-sm" data-path="${esc(f.path)}" onclick="openFileLocation(this.dataset.path)" style="flex-shrink:0">打开</button>
+      </div>`
+    }).join("")
+  }catch(e){
+    $("browseLoading").classList.add("hidden")
+    $("browseEmpty").style.display="block"
+    $("browseEmpty").textContent="加载失败: "+e.message
+  }
+}
+
+async function openFileLocation(path){
+  try{
+    await fetch("/api/open-file-location",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path})})
+    toast("已打开文件位置", "ok")
+  }catch(e){toast("打开失败","err")}
+}
+
+async function openFileDirect(path){
+  try{
+    await fetch("/api/open-file",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path})})
+    toast("已打开文件", "ok")
+  }catch(e){toast("打开失败","err")}
+}
+
+async function pickDir(){
+  const btn=$("pickDirBtn")||null;if(btn)btn.disabled=true
+  try{const r=await fetch("/api/browse-dir",{method:"POST"});const d=await r.json();if(d.path)$("outputDir").value=d.path}
+  catch(e){toast("无法打开目录选择器","err")}
+  finally{if(btn)btn.disabled=false}
+}
+
+async function stopPack(){
+  $("stopBtn").disabled=true;$("stopBtn").textContent="停止中..."
+  try{await fetch("/api/stop",{method:"POST"})}catch(e){}
+  log("info","已请求停止，正在取消剩余章节...")
+}
+function esc(s){if(!s)return"";return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+</script>
+</body>
+</html>
