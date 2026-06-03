@@ -13,7 +13,7 @@
 
 ## 功能
 
-- 多源支持：哔哩轻小说、轻小说文库、拷贝漫画、包子漫画
+- 多源支持：哔哩轻小说、轻小说文库、拷贝漫画、包子漫画、Mangabz
 - 输出格式：EPUB（小说/漫画）、CBZ（漫画）
 - 章节筛选、分卷合并、代理设置
 
@@ -29,7 +29,7 @@ https://raw.githubusercontent.com/EOEOY/ScrollPack-plugins/master
 
 ## 开发插件
 
-参考 [插件仓库](https://github.com/EOEOY/ScrollPack-plugins) 中的开发指南。继承 `BrowserSource` 或 `LightNovelSource`，实现三个方法即可。
+详见 [`ScrollPack-plugins` 开发教程](https://github.com/EOEOY/ScrollPack-plugins/blob/master/plugin_template/README.md)。继承 `BrowserSource`（漫画）或 `LightNovelSource`（小说），实现核心方法即可。
 
 ## 构建
 
