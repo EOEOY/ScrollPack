@@ -1,5 +1,9 @@
 # ScrollPack
 
+![License](https://img.shields.io/badge/license-CC%20BY--NC%204.0-blue)
+![Platform](https://img.shields.io/badge/platform-Windows%20x64-lightgrey)
+![Version](https://img.shields.io/badge/version-0.5.0-green)
+
 轻小说 / 漫画多源打包下载工具。输入作品链接，一键导出 EPUB 或 CBZ。
 
 ![](screenshots/main.png)
