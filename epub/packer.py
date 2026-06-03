@@ -18,6 +18,7 @@ class EpubPacker:
         self._toc = []
         self._added = set()
         self._cover_file = None
+        self._cover_image_data = None
         self._calibre_series = None
         self._calibre_series_index = None
 
@@ -89,6 +90,10 @@ class EpubPacker:
     def cover(self, val):
         self._cover_file = val
 
+    def set_cover_image(self, name, data):
+        self._cover_file = name
+        self._cover_image_data = data
+
     @property
     def calibre_series(self):
         return self._calibre_series
@@ -156,6 +161,12 @@ class EpubPacker:
         self.book.add_item(nav)
         ncx = epub.EpubNcx()
         self.book.add_item(ncx)
+
+        if self._cover_image_data:
+            self.book.set_cover(self._cover_file, self._cover_image_data, create_page=False)
+        elif self._cover_file:
+            cover_id = self._handle_id(self._cover_file)
+            self.book.add_metadata(None, 'meta', '', {'name': 'cover', 'content': cover_id})
 
         if self._calibre_series:
             self.book.add_metadata(None, 'meta', '', {

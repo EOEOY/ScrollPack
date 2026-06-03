@@ -228,21 +228,19 @@ def handle_save_settings():
 def handle_test_connection():
     results = []
     targets = [
-        ("\u62f7\u8d1d\u6f2b\u753b-\u4e3b\u7ad9", "https://www.2026copy.com/"),
-        ("\u62f7\u8d1d\u6f2b\u753b-mangacopy", "https://www.mangacopy.com/"),
-        ("\u54d4\u54e9\u8f7b\u5c0f\u8bf4", "https://www.bilinovel.com/"),
+        ("拷贝漫画-主站", "https://www.2026copy.com/"),
+        ("拷贝漫画-mangacopy", "https://www.mangacopy.com/"),
+        ("哔哩轻小说", "https://www.bilinovel.com/"),
     ]
     for name, url in targets:
         ok = False
         detail = ""
-        # Try httpx first
         try:
             r = httpx.get(url, timeout=10, follow_redirects=True)
             ok = r.status_code < 400
             detail = f"HTTP {r.status_code}"
         except Exception as e:
             detail = str(e)
-            # If httpx fails with SSL, try browser
             if "ssl" in str(e).lower() or "eof" in str(e).lower():
                 try:
                     from playwright.sync_api import sync_playwright
@@ -265,7 +263,6 @@ def handle_test_connection():
                     detail = f"Browser also failed: {e2}"
         results.append({"name": name, "url": url, "ok": ok, "detail": detail})
 
-    # Test Playwright engine (Edge → Chrome → bundled)
     try:
         import glob as _g, os as _os
         pdir = _BASE_DIR
@@ -273,22 +270,22 @@ def handle_test_connection():
         if _os.path.isdir(bdir):
             _os.environ["PLAYWRIGHT_BROWSERS_PATH"] = bdir
         from playwright.async_api import async_playwright
-        args = ["--disable-blink-features=AutomationControlled", "--headless=new"]
+        args_list = ["--disable-blink-features=AutomationControlled", "--headless=new"]
         async def _test():
             async with async_playwright() as p:
                 browser = None
                 engine = ""
                 try:
-                    browser = await p.chromium.launch(headless=True, channel="msedge", args=args)
+                    browser = await p.chromium.launch(headless=True, channel="msedge", args=args_list)
                     engine = "System Microsoft Edge"
                 except Exception:
                     try:
-                        browser = await p.chromium.launch(headless=True, channel="chrome", args=args)
+                        browser = await p.chromium.launch(headless=True, channel="chrome", args=args_list)
                         engine = "System Google Chrome"
                     except Exception:
                         hits = _g.glob(_os.path.join(bdir, "chromium-*", "chrome-win*", "chrome.exe"))
                         exe = hits[0] if hits else None
-                        browser = await p.chromium.launch(headless=True, executable_path=exe, args=args)
+                        browser = await p.chromium.launch(headless=True, executable_path=exe, args=args_list)
                         engine = "Bundled Chromium"
                 await browser.close()
                 return engine
@@ -316,6 +313,7 @@ def handle_plugins():
             "encrypted": p.get("_encrypted", False),
         })
     return _cors_response({"plugins": plugins})
+
 
 @app.route("/api/plugins/toggle", methods=["POST"])
 def handle_toggle_plugin():
@@ -346,7 +344,6 @@ def handle_delete_plugin():
         plugin_dir = os.path.join(_PLUGINS_DIR, pid)
         if not os.path.isdir(plugin_dir):
             return _cors_response({"error": "plugin not found"}, 404)
-        import shutil
         shutil.rmtree(plugin_dir)
         return _cors_response({"status": "ok"})
     except Exception as e:
@@ -363,7 +360,6 @@ def handle_export_plugin():
     if not os.path.isdir(plugin_dir):
         return _cors_response({"error": "plugin not found"}, 404)
 
-    import zipfile, io, tempfile
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk(plugin_dir):
@@ -383,7 +379,6 @@ def handle_import_plugin():
     if "file" not in request.files:
         return _cors_response({"error": "no file"}, 400)
 
-    import zipfile, tempfile, shutil
     f = request.files["file"]
     if not f.filename or not f.filename.endswith(".zip"):
         return _cors_response({"error": "must be .zip"}, 400)
@@ -400,7 +395,6 @@ def handle_import_plugin():
                 if len(root_dirs) != 1:
                     return _cors_response({"error": "zip must contain single plugin folder"}, 400)
                 plugin_name = list(root_dirs)[0]
-                # Validate plugin.json exists
                 has_manifest = any(m == f"{plugin_name}/plugin.json" for m in members)
                 if not has_manifest:
                     return _cors_response({"error": "missing plugin.json"}, 400)
@@ -561,7 +555,6 @@ def handle_pack():
         add_chapter_title = params.get("addChapterTitle", True)
         output_format = params.get("outputFormat", "epub")
 
-
         task.add_log("info", "正在初始化...")
 
         threading.Thread(
@@ -696,15 +689,13 @@ def serve_static(path):
 
 
 def start_server(port=8080):
-    import threading
     url = f"http://localhost:{port}"
 
     try:
         import webview
         t = threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": port, "debug": False}, daemon=True)
         t.start()
-        import os as _os
-        icon_path = _os.path.join(_BASE_DIR, "web", "icon.ico")
+        icon_path = os.path.join(_BASE_DIR, "web", "icon.ico")
         window = webview.create_window("ScrollPack", url, width=1100, height=720,
                                        min_size=(800, 500))
         webview.start()
@@ -716,7 +707,6 @@ def start_server(port=8080):
 
 
 if __name__ == "__main__":
-    import sys
     port = 20250
     if len(sys.argv) > 1:
         try:

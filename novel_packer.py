@@ -126,9 +126,9 @@ class NovelPacker:
         cover_data = b""
         if self.novel.cover_url:
             cover_data = await self._get_single_image(self.novel.cover_url)
-        cover_name = f"images/{self._image_sequence.next:06d}.jpg"
-        packer.add_image(f"OEBPS/{cover_name}", cover_data)
-        packer.cover = cover_name
+        if cover_data:
+            cover_name = f"images/{self._image_sequence.next:06d}.jpg"
+            packer.set_cover_image(cover_name, cover_data)
 
         if arg.add_chapter_title:
             packer.add_stylesheet()
@@ -282,13 +282,17 @@ class NovelPacker:
     async def _resolve_cover(self, volume, packer, detector):
         if volume.cover:
             cover_data = await self._get_single_image(volume.cover)
-            name = f"images/{self._image_sequence.next:06d}.jpg"
-            packer.add_image(f"OEBPS/{name}", cover_data)
-            packer.cover = name
+            if cover_data:
+                name = f"images/{self._image_sequence.next:06d}.jpg"
+                packer.set_cover_image(name, cover_data)
         else:
-            cover_name = detector.detect_cover()
-            if cover_name:
-                packer.cover = cover_name.replace("OEBPS/", "")
+            detected = detector.detect_cover()
+            if detected:
+                cover_name, cover_data = detected
+                if cover_name and cover_data:
+                    packer.set_cover_image(cover_name.replace("OEBPS/", ""), cover_data)
+                elif cover_name:
+                    packer.cover = cover_name.replace("OEBPS/", "")
 
     def _get_epub_name(self, volume):
         out_dir = AppConfig().output_dir or "."
@@ -339,6 +343,22 @@ class NovelPacker:
 
         img_index = 0
         failed_images = []
+        page_count = 0
+
+        if os.path.exists(cbz_path):
+            os.remove(cbz_path)
+
+        cover_data = None
+        if volume.cover:
+            cover_data = await self._get_single_image(volume.cover)
+        elif self.novel.cover_url:
+            cover_data = await self._get_single_image(self.novel.cover_url)
+
+        with zipfile.ZipFile(cbz_path, "a", zipfile.ZIP_DEFLATED) as zf:
+            if cover_data:
+                page_count += 1
+                img_index += 1
+                zf.writestr(f"{img_index:05d}.jpg", cover_data)
 
         for i, chapter in enumerate(volume.chapters):
             if AppConfig().cancelled:
@@ -382,6 +402,7 @@ class NovelPacker:
                     failed_images.append((chapter_name, j + 1, image_urls[j]))
                     continue
                 img_index += 1
+                page_count += 1
                 fname = f"{img_index:05d}{ext}"
                 with zipfile.ZipFile(cbz_path, "a", zipfile.ZIP_DEFLATED) as zf:
                     zf.writestr(fname, data)
@@ -397,7 +418,37 @@ class NovelPacker:
             if self.on_progress:
                 self.on_progress("chapter_fail", f"{msg}: {', '.join(f'{ch} p{p}' for ch,p,_ in failed_images)}")
 
+        self._write_comic_info(cbz_path, volume, page_count, cbz_name)
+
         return os.path.abspath(cbz_path)
+
+    def _write_comic_info(self, cbz_path, volume, page_count, title):
+        series_index = VolumeUtil.get_series_index(volume.volume_name)
+        comic_info = '<?xml version="1.0"?>\n'
+        comic_info += '<ComicInfo xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n'
+        comic_info += f"  <Title>{self._xml_escape(volume.volume_name)}</Title>\n"
+        comic_info += f"  <Series>{self._xml_escape(self.novel.title)}</Series>\n"
+        if series_index is not None:
+            comic_info += f"  <Number>{series_index}</Number>\n"
+        if self.novel.author:
+            comic_info += f"  <Writer>{self._xml_escape(self.novel.author)}</Writer>\n"
+        if self.novel.publisher:
+            comic_info += f"  <Publisher>{self._xml_escape(self.novel.publisher)}</Publisher>\n"
+        if self.novel.tags:
+            comic_info += f"  <Genre>{self._xml_escape(','.join(self.novel.tags))}</Genre>\n"
+        if self.novel.description:
+            comic_info += f"  <Summary>{self._xml_escape(self.novel.description)}</Summary>\n"
+        comic_info += f"  <PageCount>{page_count}</PageCount>\n"
+        comic_info += "  <Manga>Yes</Manga>\n"
+        comic_info += "</ComicInfo>\n"
+        with zipfile.ZipFile(cbz_path, "a", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("ComicInfo.xml", comic_info.encode("utf-8"))
+
+    @staticmethod
+    def _xml_escape(text):
+        if not isinstance(text, str):
+            text = str(text)
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&apos;")
 
     async def _pack_manga_volume(self, volume: Volume) -> str:
         epub_path = self._get_cbz_path(volume).replace(".cbz", ".epub")
@@ -412,6 +463,15 @@ class NovelPacker:
         packer.publisher = self.novel.publisher
         packer.subjects = self.novel.tags or []
         packer.description = self.novel.description
+
+        cover_data = None
+        if volume.cover:
+            cover_data = await self._get_single_image(volume.cover)
+        elif self.novel.cover_url:
+            cover_data = await self._get_single_image(self.novel.cover_url)
+        if cover_data:
+            cover_name = f"images/{self._image_sequence.next:06d}.jpg"
+            packer.set_cover_image(cover_name, cover_data)
 
         failed_images = []
 

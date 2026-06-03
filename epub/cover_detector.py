@@ -26,11 +26,13 @@ class LightNovelCoverDetector:
 
     def __init__(self):
         self._image_info = {}
+        self._image_data = {}
 
     def add(self, name, data):
         try:
             info = _get_image_info(io.BytesIO(data))
             self._image_info[name] = info
+            self._image_data[name] = data
         except UnsupportedImageException:
             pass
 
@@ -39,8 +41,9 @@ class LightNovelCoverDetector:
             return None
         for name, info in self._image_info.items():
             if info.ratio < 1:
-                return name
-        return next(iter(self._image_info.keys()))
+                return name, self._image_data.get(name)
+        name = next(iter(self._image_info.keys()))
+        return name, self._image_data.get(name)
 
 
 def _read_int(f, count, big_endian):
