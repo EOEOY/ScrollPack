@@ -482,20 +482,23 @@ def handle_repo_install():
 def handle_version():
     from version import VERSION, GIT_REPO
     try:
-        import httpx, re
-        r = httpx.get(f"https://api.github.com/repos/{GIT_REPO}/releases/latest", timeout=8, follow_redirects=True)
+        r = httpx.get(
+            f"https://raw.githubusercontent.com/{GIT_REPO}/master/version.py",
+            timeout=8, follow_redirects=True,
+        )
         if r.status_code == 200:
-            data = r.json()
-            latest = re.sub(r"^v", "", data.get("tag_name", ""))
-            return _cors_response({
-                "current": VERSION,
-                "latest": latest,
-                "update": latest and latest != VERSION,
-                "url": data.get("html_url", ""),
-            })
+            m = re.search(r'VERSION\s*=\s*"([^"]+)"', r.text)
+            if m:
+                latest = m.group(1)
+                return _cors_response({
+                    "current": VERSION,
+                    "latest": latest,
+                    "update": latest != VERSION,
+                    "url": f"https://github.com/{GIT_REPO}/releases",
+                })
     except Exception:
         pass
-    return _cors_response({"current": VERSION, "latest": None, "update": False, "url": ""})
+    return _cors_response({"current": VERSION, "latest": None, "update": None, "url": ""})
 
 
 @app.route("/api/init", methods=["POST"])
