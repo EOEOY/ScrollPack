@@ -4,6 +4,8 @@
 
 ![](screenshots/main.png)
 
+![](screenshots/pack.png)
+
 ## 功能
 
 - 多源支持：哔哩轻小说、轻小说文库、拷贝漫画、包子漫画
