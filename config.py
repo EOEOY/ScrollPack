@@ -1,9 +1,15 @@
 import json
 import os
+import sys
 from logger import logger
 
+if getattr(sys, 'frozen', False):
+    _CONFIG_DIR = os.path.dirname(sys.executable)
+else:
+    _CONFIG_DIR = os.path.dirname(os.path.abspath(__file__))
 
-_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "packer_config.json")
+os.makedirs(_CONFIG_DIR, exist_ok=True)
+_CONFIG_PATH = os.path.join(_CONFIG_DIR, "packer_config.json")
 
 
 class AppConfig:

@@ -32,7 +32,11 @@ class ChapterResult:
 
 
 class NovelPacker:
-    sources = load_all_sources()
+    sources = []
+
+    @classmethod
+    def _ensure_sources(cls):
+        cls.sources = load_all_sources()
 
     def __init__(self, source, url):
         self.light_novel_source = source
@@ -49,10 +53,19 @@ class NovelPacker:
 
     @classmethod
     def from_url(cls, url):
+        cls._ensure_sources()
+        has_sources = len(cls.sources) > 0
         for source in cls.sources:
             if source.support_url(url):
                 return cls(source, url)
-        raise ValueError(f"Unsupported url: {url}")
+        if not has_sources:
+            raise ValueError("没有安装任何插件，请先在设置中下载插件")
+        names = ", ".join(s.name for s in cls.sources[:4])
+        raise ValueError(
+            f"未识别网址，请确认链接包含作品ID\n"
+            f"例如: https://www.bilinovel.com/novel/12345.html\n"
+            f"已装插件: {names}"
+        )
 
     async def init(self, novel_callback=None, catalog_callback=None):
         self.novel = await self.get_novel()
@@ -76,7 +89,6 @@ class NovelPacker:
         config = AppConfig()
         if not arg.combine_volume:
             for volume in arg.pack_volumes:
-                logger.info(f"开始打包 {volume.catalog.novel.title} {volume.volume_name}")
                 if self.on_progress:
                     self.on_progress("volume_start", volume.volume_name)
                 self._image_sequence.reset()
@@ -89,7 +101,6 @@ class NovelPacker:
                 else:
                     result = await self._pack_volume(volume, arg.add_chapter_title, config)
                 reports.append(result)
-                logger.info(f"打包完成 {volume.catalog.novel.title} {volume.volume_name}")
                 if self.on_progress:
                     self.on_progress("volume_done", volume.volume_name)
         else:
@@ -97,7 +108,6 @@ class NovelPacker:
                 raise ValueError("漫画不支持合并分卷")
             title = self._sanitize_filename(self.novel.title)
             path = os.path.join(AppConfig().output_dir or ".", title, f"{title}.epub")
-            logger.info(f"EPUB file: {path}")
             result = await self._combine_volume(path, arg, config)
             reports.append(result)
         if self.on_progress:
@@ -124,7 +134,6 @@ class NovelPacker:
             packer.add_stylesheet()
 
         for volume in arg.pack_volumes:
-            logger.info(f"开始处理: {volume.volume_name}")
             if self.on_progress:
                 self.on_progress("volume_start", volume.volume_name)
             results = await self._resolve_chapters_with_retry(
@@ -144,7 +153,6 @@ class NovelPacker:
                     if i == 0:
                         first_href = name
             packer.add_nav_point(volume.volume_name, first_href)
-            logger.info(f"处理完成: {volume.volume_name}")
             if self.on_progress:
                 self.on_progress("volume_done", volume.volume_name)
         packer.pack()
@@ -168,7 +176,6 @@ class NovelPacker:
                 title_div = soup.new_tag("div", **{"class": "chapter-title"})
                 title_div.string = chapter.chapter_name
                 body.insert(0, title_div)
-        logger.info(f"OK {chapter.volume.volume_name} {chapter.chapter_name}")
         return str(soup)
 
     async def _resolve_chapters_with_retry(self, chapters, packer, add_chapter_title, config, detector=None):
@@ -246,7 +253,6 @@ class NovelPacker:
                 packer.add_chapter(f"OEBPS/{name}", chapter.chapter_name, doc_str)
         await self._resolve_cover(volume, packer, detector)
         packer.pack()
-        logger.info(f"EPUB file: {packer.absolute_path}")
         if self.on_progress:
             self.on_progress("volume_done", f"{volume.volume_name} -> {packer.absolute_path}")
         return packer.absolute_path
@@ -339,7 +345,6 @@ class NovelPacker:
                 break
 
             chapter_name = chapter.chapter_name or f"chapter_{i + 1}"
-            logger.info(f"  [{i+1}/{len(volume.chapters)}] {chapter_name}")
             if self.on_progress:
                 self.on_progress("chapter_start", chapter_name)
 
@@ -351,7 +356,6 @@ class NovelPacker:
                     self.on_progress("chapter_fail", str(e))
                 continue
 
-            logger.info(f"    {len(image_urls)} images")
             if not image_urls:
                 continue
 
@@ -393,7 +397,6 @@ class NovelPacker:
             if self.on_progress:
                 self.on_progress("chapter_fail", f"{msg}: {', '.join(f'{ch} p{p}' for ch,p,_ in failed_images)}")
 
-        logger.info(f"CBZ: {os.path.abspath(cbz_path)}")
         return os.path.abspath(cbz_path)
 
     async def _pack_manga_volume(self, volume: Volume) -> str:
@@ -418,7 +421,6 @@ class NovelPacker:
                 break
 
             chapter_name = chapter.chapter_name or f"chapter_{i + 1}"
-            logger.info(f"  [{i+1}/{len(volume.chapters)}] {chapter_name}")
             if self.on_progress:
                 self.on_progress("chapter_start", chapter_name)
 
@@ -430,7 +432,6 @@ class NovelPacker:
                     self.on_progress("chapter_fail", str(e))
                 continue
 
-            logger.info(f"    {len(image_urls)} images")
             if not image_urls:
                 continue
 
@@ -487,7 +488,6 @@ class NovelPacker:
 
         # Retry failed images one final pass
         if failed_images:
-            logger.info(f"Retrying {len(failed_images)} failed images...")
             if self.on_progress:
                 self.on_progress("info", f"重试 {len(failed_images)} 张缺失图片...")
             success = []

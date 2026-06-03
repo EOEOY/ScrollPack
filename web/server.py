@@ -1,14 +1,25 @@
+import io
 import json
-import asyncio
 import os
+import re
 import sys
+import glob
+import shutil
+import tempfile
+import zipfile
+import datetime
+import asyncio
+import threading
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_crypto_path = os.path.join(os.path.dirname(__file__), "..", "..", "ScrollPack-crypto")
-if os.path.isdir(_crypto_path):
-    sys.path.insert(0, os.path.abspath(_crypto_path))
+import httpx
 
 from flask import Flask, request, jsonify, send_from_directory
+
+if not getattr(sys, 'frozen', False):
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+_BASE_DIR = os.environ.get('SCROLLPACK_BASE_DIR', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_PLUGINS_DIR = os.path.join(os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else _BASE_DIR, 'plugins')
 
 from config import AppConfig
 from novel_packer import NovelPacker
@@ -40,12 +51,101 @@ class TaskState:
         return self._cancelled
 
     def add_log(self, type, message):
-        import datetime
         self.logs.append({
             "type": type,
             "message": message,
             "time": datetime.datetime.now().isoformat(),
         })
+
+
+def _run_pack_task(task, url, params, selected_chapters, combine_volume, add_chapter_title, output_format):
+    try:
+        packer = NovelPacker.from_url(url)
+        task.packer = packer
+        packer.on_progress = lambda type, msg: task.add_log(type, msg)
+
+        async def _do_pack():
+            await packer.init()
+            task.novel = packer.novel
+            task.catalog = packer.catalog
+
+            selected_chs = []
+            if selected_chapters:
+                chapter_map = {}
+                for vol in packer.catalog.volumes:
+                    for ch in vol.chapters:
+                        chapter_map[ch.chapter_url] = ch
+                for u in selected_chapters:
+                    ch = chapter_map.get(u)
+                    if ch:
+                        selected_chs.append(ch)
+
+            if not selected_chs:
+                task.status = "error"
+                task.add_log("error", "未选择任何章节")
+                return
+
+            from models import Volume
+
+            if combine_volume:
+                vol_name = "打包"
+                nums = []
+                for ch in selected_chs:
+                    m = re.search(r"第\s*(\d+[\.\d]*)\s*", ch.chapter_name)
+                    if m:
+                        nums.append(m.group(1))
+                if nums and len(nums) == len(selected_chs):
+                    try:
+                        sorted_nums = sorted(nums, key=lambda x: tuple(map(int, x.split("."))))
+                        if len(sorted_nums) == 1:
+                            vol_name = f"第{sorted_nums[0]}话"
+                        else:
+                            vol_name = f"第{sorted_nums[0]}-{sorted_nums[-1]}话"
+                    except ValueError:
+                        pass
+                vol = Volume(vol_name, packer.catalog)
+                vol.chapters = selected_chs
+                volumes = [vol]
+                arg = PackArgument(
+                    add_chapter_title=add_chapter_title,
+                    combine_volume=True,
+                    pack_volumes=volumes,
+                    output_format=output_format,
+                )
+                task.add_log("info", "开始打包...")
+                task.output_files = await packer.pack(arg)
+                task.status = "done"
+                task.add_log("info", "全部打包完成!")
+            else:
+                vol_groups = {}
+                for ch in selected_chs:
+                    vol_key = ch.volume.volume_name
+                    if vol_key not in vol_groups:
+                        vol_groups[vol_key] = []
+                    vol_groups[vol_key].append(ch)
+                for vol_name, chapters in vol_groups.items():
+                    if AppConfig().cancelled:
+                        task.add_log("info", "已取消")
+                        break
+                    vol = Volume(vol_name, packer.catalog)
+                    vol.chapters = chapters
+                    arg = PackArgument(
+                        add_chapter_title=add_chapter_title,
+                        combine_volume=False,
+                        pack_volumes=[vol],
+                        output_format=output_format,
+                    )
+                    task.add_log("info", f"开始打包: {vol_name}")
+                    files = await packer.pack(arg)
+                    task.output_files.extend(files)
+                    task.add_log("info", f"打包完成: {vol_name}")
+                task.status = "done"
+                task.add_log("info", "全部打包完成!")
+
+        asyncio.run(_do_pack())
+    except Exception as e:
+        task.status = "error"
+        task.add_log("error", str(e))
 
 
 def _apply_config(params):
@@ -126,7 +226,6 @@ def handle_save_settings():
 
 @app.route("/api/test-connection", methods=["GET"])
 def handle_test_connection():
-    import httpx
     results = []
     targets = [
         ("\u62f7\u8d1d\u6f2b\u753b-\u4e3b\u7ad9", "https://www.2026copy.com/"),
@@ -169,7 +268,7 @@ def handle_test_connection():
     # Test Playwright engine (Edge → Chrome → bundled)
     try:
         import glob as _g, os as _os
-        pdir = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+        pdir = _BASE_DIR
         bdir = _os.path.join(pdir, "playwright_browsers")
         if _os.path.isdir(bdir):
             _os.environ["PLAYWRIGHT_BROWSERS_PATH"] = bdir
@@ -244,7 +343,7 @@ def handle_delete_plugin():
         pid = params.get("id", "")
         if not pid or ".." in pid or "/" in pid or "\\" in pid:
             return _cors_response({"error": "invalid id"}, 400)
-        plugin_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "plugins", pid)
+        plugin_dir = os.path.join(_PLUGINS_DIR, pid)
         if not os.path.isdir(plugin_dir):
             return _cors_response({"error": "plugin not found"}, 404)
         import shutil
@@ -260,7 +359,7 @@ def handle_export_plugin():
     if not pid or ".." in pid or "/" in pid or "\\" in pid:
         return _cors_response({"error": "invalid id"}, 400)
 
-    plugin_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "plugins", pid)
+    plugin_dir = os.path.join(_BASE_DIR, "plugins", pid)
     if not os.path.isdir(plugin_dir):
         return _cors_response({"error": "plugin not found"}, 404)
 
@@ -289,7 +388,7 @@ def handle_import_plugin():
     if not f.filename or not f.filename.endswith(".zip"):
         return _cors_response({"error": "must be .zip"}, 400)
 
-    plugins_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "plugins")
+    plugins_dir = _PLUGINS_DIR
 
     try:
         with tempfile.TemporaryDirectory() as tmp:
@@ -297,7 +396,7 @@ def handle_import_plugin():
             f.save(zp)
             with zipfile.ZipFile(zp, "r") as zf:
                 members = zf.namelist()
-                root_dirs = set(m.split("/")[0] for m in members if "/" in m)
+                root_dirs = set(m.split("/")[0] for m in members if "/" in m and not m.split("/")[0].startswith("__"))
                 if len(root_dirs) != 1:
                     return _cors_response({"error": "zip must contain single plugin folder"}, 400)
                 plugin_name = list(root_dirs)[0]
@@ -344,7 +443,7 @@ def handle_check_updates():
             return _cors_response({"error": "未配置插件仓库地址"}, 400)
         repo = PluginRepository(cfg.repo_url)
         local = []
-        plugins_dir = os.path.join(os.path.dirname(__file__), "..", "plugins")
+        plugins_dir = _PLUGINS_DIR
         for entry in os.listdir(plugins_dir):
             manifest = os.path.join(plugins_dir, entry, "plugin.json")
             if os.path.isfile(manifest):
@@ -372,7 +471,7 @@ def handle_repo_install():
         if not download_url:
             return _cors_response({"error": "缺少download参数"}, 400)
         repo = PluginRepository(cfg.repo_url)
-        plugins_dir = os.path.join(os.path.dirname(__file__), "..", "plugins")
+        plugins_dir = _PLUGINS_DIR
         name = asyncio.run(repo.install_plugin(download_url, plugins_dir))
         return _cors_response({"status": "ok", "name": name})
     except Exception as e:
@@ -381,10 +480,10 @@ def handle_repo_install():
 
 @app.route("/api/version", methods=["GET"])
 def handle_version():
-    from version import VERSION
+    from version import VERSION, GIT_REPO
     try:
         import httpx, re
-        r = httpx.get("https://api.github.com/repos/Montaro2017/ScrollPack/releases/latest", timeout=8, follow_redirects=True)
+        r = httpx.get(f"https://api.github.com/repos/{GIT_REPO}/releases/latest", timeout=8, follow_redirects=True)
         if r.status_code == 200:
             data = r.json()
             latest = re.sub(r"^v", "", data.get("tag_name", ""))
@@ -462,109 +561,11 @@ def handle_pack():
 
         task.add_log("info", "正在初始化...")
 
-        def run_pack():
-            nonlocal task
-            try:
-                packer = NovelPacker.from_url(url)
-                task.packer = packer
-
-                def on_progress(type, message):
-                    task.add_log(type, message)
-
-                packer.on_progress = on_progress
-
-                async def _do_pack():
-                    await packer.init()
-                    task.novel = packer.novel
-                    task.catalog = packer.catalog
-
-                    # Resolve selected chapter URLs to Chapter objects
-                    selected_chs = []
-                    if selected_chapters:
-                        chapter_map = {}
-                        for vol in packer.catalog.volumes:
-                            for ch in vol.chapters:
-                                chapter_map[ch.chapter_url] = ch
-                        for url in selected_chapters:
-                            ch = chapter_map.get(url)
-                            if ch:
-                                selected_chs.append(ch)
-
-                    if not selected_chs:
-                        task.status = "error"
-                        task.add_log("error", "未选择任何章节")
-                        return
-
-                    from models import Volume
-
-                    if combine_volume:
-                        vol_name = "打包"
-                        import re as _re
-                        nums = []
-                        for ch in selected_chs:
-                            m = _re.search(r"第\s*(\d+[\.\d]*)\s*", ch.chapter_name)
-                            if m:
-                                nums.append(m.group(1))
-                        if nums and len(nums) == len(selected_chs):
-                            try:
-                                sorted_nums = sorted(nums, key=lambda x: tuple(map(int, x.split("."))))
-                                if len(sorted_nums) == 1:
-                                    vol_name = f"第{sorted_nums[0]}话"
-                                else:
-                                    vol_name = f"第{sorted_nums[0]}-{sorted_nums[-1]}话"
-                            except ValueError:
-                                pass
-                        vol = Volume(vol_name, packer.catalog)
-                        vol.chapters = selected_chs
-                        volumes = [vol]
-
-                        arg = PackArgument(
-                            add_chapter_title=add_chapter_title,
-                            combine_volume=True,
-                            pack_volumes=volumes,
-                            output_format=output_format,
-                        )
-
-                        task.add_log("info", "开始打包...")
-                        task.output_files = await packer.pack(arg)
-                        task.status = "done"
-                        task.add_log("info", "全部打包完成!")
-                    else:
-                        vol_groups = {}
-                        for ch in selected_chs:
-                            vol_key = ch.volume.volume_name
-                            if vol_key not in vol_groups:
-                                vol_groups[vol_key] = []
-                            vol_groups[vol_key].append(ch)
-
-                        for vol_name, chapters in vol_groups.items():
-                            if AppConfig().cancelled:
-                                task.add_log("info", "已取消")
-                                break
-                            vol = Volume(vol_name, packer.catalog)
-                            vol.chapters = chapters
-
-                            arg = PackArgument(
-                                add_chapter_title=add_chapter_title,
-                                combine_volume=False,
-                                pack_volumes=[vol],
-                                output_format=output_format,
-                            )
-
-                            task.add_log("info", f"开始打包: {vol_name}")
-                            files = await packer.pack(arg)
-                            task.output_files.extend(files)
-                            task.add_log("info", f"打包完成: {vol_name}")
-                        task.status = "done"
-                        task.add_log("info", "全部打包完成!")
-
-                asyncio.run(_do_pack())
-            except Exception as e:
-                task.status = "error"
-                task.add_log("error", str(e))
-
-        import threading
-        threading.Thread(target=run_pack, daemon=True).start()
+        threading.Thread(
+            target=_run_pack_task,
+            args=(task, url, params, selected_chapters, combine_volume, add_chapter_title, output_format),
+            daemon=True
+        ).start()
 
         return _cors_response({"taskId": task.id, "status": "started"})
     except Exception as e:
@@ -612,7 +613,7 @@ def handle_browse_files():
     try:
         out_dir = AppConfig().output_dir or "."
         if not os.path.isabs(out_dir):
-            out_dir = os.path.join(os.path.dirname(__file__), "..", out_dir)
+            out_dir = os.path.join(_BASE_DIR, out_dir)
         out_dir = os.path.normpath(os.path.abspath(out_dir))
         files = []
         for root, dirs, filenames in os.walk(out_dir):
@@ -685,15 +686,30 @@ def handle_browse_dir():
 def serve_static(path):
     if not path:
         path = "index.html"
-    static_dir = os.path.join(os.path.dirname(__file__))
+    static_dir = os.path.join(_BASE_DIR, "web")
     if os.path.exists(os.path.join(static_dir, path)):
         return send_from_directory(static_dir, path)
     return _cors_response({"error": "Not Found"}, 404)
 
 
 def start_server(port=8080):
-    print(f"WebUI 已启动: http://localhost:{port}")
-    app.run(host="0.0.0.0", port=port, debug=False)
+    import threading
+    url = f"http://localhost:{port}"
+
+    try:
+        import webview
+        t = threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": port, "debug": False}, daemon=True)
+        t.start()
+        import os as _os
+        icon_path = _os.path.join(_BASE_DIR, "web", "icon.ico")
+        window = webview.create_window("ScrollPack", url, width=1100, height=720,
+                                       min_size=(800, 500))
+        webview.start()
+    except ImportError:
+        import webbrowser
+        webbrowser.open(url)
+        print(f"WebUI: {url}")
+        app.run(host="0.0.0.0", port=port, debug=False)
 
 
 if __name__ == "__main__":

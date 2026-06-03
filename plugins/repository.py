@@ -1,7 +1,10 @@
 import json
 import io
 import os
+import re
 import shutil
+import time
+import asyncio
 import zipfile
 
 import httpx
@@ -19,7 +22,6 @@ class PluginRepository:
         return f"{self.repo_url}/index.json"
 
     async def fetch_index(self):
-        import time
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
             r = await client.get(self._index_url + f"?t={int(time.time())}")
             r.raise_for_status()
@@ -46,7 +48,6 @@ class PluginRepository:
             else:
                 new_plugins.append(_make_entry(rp))
 
-        # Full list: all remote plugins with local status
         full = []
         for rp in remote_plugins:
             local = next((p for p in local_plugins if p["id"] == rp["id"]), None)
@@ -55,7 +56,6 @@ class PluginRepository:
         return {"updates": updates, "new": new_plugins, "all": full}
 
     async def download_plugin(self, download_url, max_retries=3):
-        import asyncio
         url = download_url
         if not url.startswith("http"):
             url = f"{self.repo_url}/{url.lstrip('/')}"
@@ -77,19 +77,56 @@ class PluginRepository:
         data = await self.download_plugin(download_url)
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             members = zf.namelist()
-            root_dirs = sorted(set(
-                m.split("/")[0] for m in members
-                if m.endswith("/") or "/" in m
-            ))
-            if not root_dirs:
-                raise ValueError("Invalid plugin zip: no root directory")
-            plugin_name = root_dirs[0]
+
+            def _derive_name():
+                name = re.sub(r"[^\w\-]", "_", os.path.basename(download_url).rsplit(".", 1)[0])
+                return name or "plugin"
+
+            plugin_name = ""
+            prefix_from_zip = False
+
+            plugin_json_paths = [m for m in members if m.endswith("plugin.json")]
+            if plugin_json_paths:
+                candidates = []
+                for m in plugin_json_paths:
+                    prefix = m.rsplit("/", 1)[0] if "/" in m else ""
+                    if not prefix.startswith("__"):
+                        candidates.append(prefix)
+                if candidates:
+                    candidates = sorted(set(candidates))
+                    if candidates[0]:
+                        plugin_name = candidates[0]
+                        prefix_from_zip = True
+                if not plugin_name and len(plugin_json_paths) == 1:
+                    plugin_name = _derive_name()
+
+            if not plugin_name:
+                root_dirs = sorted(set(
+                    m.split("/")[0] for m in members if "/" in m and not m.split("/")[0].startswith("__")
+                ))
+                if root_dirs:
+                    plugin_name = root_dirs[0]
+                    prefix_from_zip = True
+
+            if not plugin_name:
+                plugin_name = _derive_name()
+
             dest = os.path.join(plugins_dir, plugin_name)
             if os.path.exists(dest):
                 shutil.rmtree(dest)
             os.makedirs(dest, exist_ok=True)
+
+            prefix_start = plugin_name + "/"
+
             for m in members:
-                rel = m.split("/", 1)[1] if "/" in m else ""
+                if m.endswith("/"):
+                    continue
+                if prefix_from_zip:
+                    if not m.startswith(prefix_start):
+                        continue
+                    rel = m[len(prefix_start):]
+                else:
+                    rel = m
                 if not rel:
                     continue
                 target = os.path.join(dest, rel)

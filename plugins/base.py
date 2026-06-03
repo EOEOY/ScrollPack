@@ -64,8 +64,6 @@ class BrowserSource(LightNovelSource):
     _playwright = None
     _page = None
 
-    # ── browser lifecycle ────────────────────────────
-
     async def _ensure_browser(self):
         if self._browser is not None:
             try:

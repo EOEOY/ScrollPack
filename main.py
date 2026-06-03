@@ -22,7 +22,7 @@ def print_welcome():
     print("欢迎使用轻小说/漫画打包器!")
     print(f"作者: Spark  当前版本: {VERSION}")
     print("支持: 哔哩轻小说 | 轻小说文库 | 拷贝漫画 | 包子漫画")
-    print("--------------------------------------------------")
+    print()
     print("[1] 输入链接开始打包")
     print("[2] 设置")
     print("[3] 测试连接")
@@ -63,7 +63,7 @@ def read_select_volume(catalog):
     for i, v in enumerate(catalog.volumes):
         ch_count = len(v.chapters)
         print(f"[{i + 1}] {v.volume_name} ({ch_count}话)" if ch_count else f"[{i + 1}] {v.volume_name}")
-    print("---------------")
+    print()
     print("[0] 选择全部")
     print("请选择需要下载的分卷(可输入如1-9进行范围选择以及如2,5单独选择):")
     inp = sys.stdin.readline().strip()
@@ -113,7 +113,7 @@ def show_settings():
     cfg = AppConfig()
     while True:
         print()
-        print("=== 设置 ===")
+        print("[设置]")
         print(f"[1] 无头模式(后台运行): {'是' if cfg.headless else '否 (可见窗口)'}")
         print(f"[2] 输出目录: {cfg.output_dir or '.'}")
         print(f"[3] 最大重试次数: {cfg.max_retries}")

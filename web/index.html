@@ -178,8 +178,8 @@ body { font-family:var(--font); background:var(--bg); color:var(--text); -webkit
 .modal-overlay.open { display:flex }
 .modal-box { background:var(--panel); border:1px solid var(--border); border-radius:12px; width:620px; max-height:80vh; display:flex; overflow:hidden; box-shadow:0 16px 48px rgba(0,0,0,0.6) }
 .modal-box h3 { font-size:14px; font-weight:600; margin-bottom:16px; display:flex; align-items:center; gap:8px }
-.modal-box .close-btn { margin-left:auto; background:none; border:none; color:var(--text3); font-size:18px; cursor:pointer; padding:0 4px }
-.modal-box .close-btn:hover { color:var(--text) }
+.modal-box .close-btn, .panel-header .close-btn { margin-left:auto; background:none; border:none; color:var(--text3); font-size:18px; cursor:pointer; padding:0 4px }
+.modal-box .close-btn:hover, .panel-header .close-btn:hover { color:var(--text) }
 
 .modal-sidebar { width:140px; min-width:140px; background:var(--panel2); border-right:1px solid var(--border); padding:16px 0; display:flex; flex-direction:column; gap:2px }
 .modal-sidebar .tab { padding:10px 16px; font-size:12px; color:var(--text3); cursor:pointer; border-left:2px solid transparent; background:transparent; border-top:none; border-right:none; border-bottom:none; width:100%; text-align:left; font-family:var(--font); transition:all 0.12s }
@@ -277,7 +277,7 @@ body { font-family:var(--font); background:var(--bg); color:var(--text); -webkit
     </div>
 
     <div class="panel hidden" id="browsePanel">
-      <div class="panel-header"><h3>已生成的文件</h3></div>
+      <div class="panel-header"><h3>已生成的文件</h3><button class="close-btn" onclick="closeBrowse()">&times;</button></div>
       <div class="panel-body">
         <div id="browseLoading" style="text-align:center;padding:20px;color:var(--text3)">加载中...</div>
         <div class="dl-list hidden" id="browseList"></div>
@@ -809,7 +809,6 @@ function showDL(files){
 async function browseFiles(){
   $("placeholder").style.display="none"
   $("novelPanel").classList.add("hidden")
-  $("progressPanel").classList.add("hidden")
   $("downloadPanel").classList.add("hidden")
   $("browsePanel").classList.remove("hidden")
   $("browseLoading").classList.remove("hidden")
@@ -842,6 +841,13 @@ async function browseFiles(){
     $("browseEmpty").style.display="block"
     $("browseEmpty").textContent="加载失败: "+e.message
   }
+}
+
+function closeBrowse(){
+  $("browsePanel").classList.add("hidden")
+  if(!$("progressPanel").classList.contains("hidden")) return
+  if(!$("novelPanel").classList.contains("hidden")) return
+  $("placeholder").style.display="block"
 }
 
 async function openFileLocation(path){
