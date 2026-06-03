@@ -21,8 +21,6 @@ a = Analysis(
         'plugins.base',
         'plugins.repository',
         'plugins.crypto_loader',
-        'plugins.crypto_loader',
-        'plugins._keys',
         'epub',
         'epub.packer',
         'epub.constants',
